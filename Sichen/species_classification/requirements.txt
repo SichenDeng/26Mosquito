@@ -1,0 +1,6 @@
+# Install torch/torchvision FIRST with the right build for your machine (see CLAUDE.md), then:
+#   pip install -r requirements.txt
+torch
+torchvision
+pillow
+matplotlib
