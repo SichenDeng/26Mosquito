@@ -40,7 +40,7 @@
   1. `cd Sichen\species_classification`，`python -m venv .venv`，`.venv\Scripts\activate`
   2. `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126`，`pip install -r requirements.txt`
   3. 检查：`python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"`
-  4. 把 Mac 上的 `data/processed/ong2021_800/`（108 MB，gitignore 了）手动拷到同一路径；`splits.csv` 通过 git 同步
+  4. `data/processed/ong2021_800/`（108 MB）和 `splits.csv` 都在 git 里，`git pull` 就能拿到。原图 `data/raw/` 没有提交，需要时用下载脚本重新下载
   5. `python train.py`；如果报 CUDA out of memory，就改用 `python train.py --batch-size 8`
 
 ## 已做的决定
