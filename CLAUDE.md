@@ -5,7 +5,7 @@
 
 ## ⭐ 新对话先看这里（最后更新：2026-11-09）
 - **当前状态**：baseline 已在 **Windows 笔记本（RTX 4070 Laptop）** 上训练并评估完（运行文件夹 `runs\20261109_181015`，只在这台电脑上）；结果见"当前进度"里的 Step 3
-- **下一步**：只用蚊子训练的模型（`runs\20261109_203751`）在 val 上 0.983，热区在蚊子身上，但边框测试显示约 8 px 的背景边框仍有一些泄漏。下一步（待用户决定）：缩小边框重新训练，再跑同样的检查；之后在 test 上只跑一次，再做 Step 6 的 skin 数据集检查
+- **下一步**：紧边框模型（`runs\20261110_160414`）val 0.972，背景泄漏已消除（只留背景 AUC 0.584）。待用户同意后用它在 test 上只跑一次，然后做 Step 6 的 skin 数据集检查（skin 图也需要先抠图）
 - **和用户的协作方式**：
   - 用中文回答（用户要英文时再用英文）
   - 一步一步带着做，讲清楚原理；不要一次生成一整套复杂代码
@@ -47,7 +47,7 @@
 | `data/raw/ong2021/` | 原图，4.5 GB（**不在 git 里**，只在 Mac 上有） |
 | `runs/` | 训练输出（不在 git 里） |
 | `results/` | 从 `runs/` 挑出来的结果（指标、图、预测；不含 `best.pt`），在 git 里，`README.md` 里有说明和总结 |
-| `scripts/make_masked_images.py` | 生成去背景的图 → `data/processed/ong2021_800_masked/`（不在 git 里，Windows 上约 6 分钟） |
+| `scripts/make_masked_images.py` | 生成去背景的图 → `data/processed/ong2021_800_masked_tight/`（不在 git 里，Windows 上约 6 分钟；旧版 8 px 边框的在 `ong2021_800_masked/`） |
 
 另外还有 `Sichen/yolo_learning/`：早期学习 YOLO 的练习目录，只有 Mac 上的 `.venv`（Python 3.9、torch 2.8、ultralytics）。Mac 上的 species_classification 目前借用这个 venv。
 
@@ -124,8 +124,15 @@
     - 去掉最外圈边框：acc 0.972 → 0.928（albopictus recall 1.000 → 0.902），AUC 0.990
     - 结论：模型主要靠蚊子判断，但约 8 px 的背景边框还有一些泄漏。layer4 的 Grad-CAM 分辨率太粗，看不出这一点
     - 第一版边框测试把浅色腿节和白环也算进了“边框”（AUC 0.896），后来改成用生长后的整个区域当本体，边框才是纯背景
-  - **test 还没用**：等泄漏问题处理完再只跑一次
-  - 结果整理在 `results/`（含英文 README），两个模型的完整数字对比都在那里
+  - 结果整理在 `results/`（含英文 README），各模型的完整数字对比都在那里
+- [x] **紧边框重新训练**（2026-11-10，`runs\20261110_160414`，`--image-dir data/processed/ong2021_800_masked_tight`；best = epoch 18）
+  - 抠图改成只保留比背景暗的蚊子像素（补洞）外加 2 px，`MARGIN_RADIUS` 从 8 改成 2；抠图面积中位数从 9.6% 降到 3.8%。旧的 `ong2021_800_masked` 保留不动
+  - val：acc 0.972，蚊子级 0.978（和 8 px 模型的差别在噪声范围内）。错 5 张：aegypti_139 两张、aegypti57d、albopictus26c、albopictus47a
+  - **只留背景：AUC 0.584**（8 px 模型是 0.953）→ 背景泄漏基本消除
+  - 边框测试在 2 px 下已经没有意义：边框紧贴蚊子，测到的主要是蚊子自己的边缘和轮廓
+  - Grad-CAM：热区在蚊子身上（身体或腿）
+  - 原图输入只有 0.594 → 用在装置照片上时，必须先做同样的抠图
+  - **test 还没用**：等用户确定最终模型后只跑一次
 - [ ] Step 4：用 `predict.py` 对单张图和文件夹做预测，确认能用 ← 下一步
 - [ ] Step 5：对照实验（每次只改一个变量，在 val 上比较）：裁剪 vs 不裁剪；色差校正（如 gray-world 白平衡）或 hue/saturation 增强；更高的输入分辨率
 - [ ] Step 6：domain shift 检查：在 skin 数据集上测；装置有照片后单独测试并单独报告，需要的话标注一些装置照片来 fine-tune

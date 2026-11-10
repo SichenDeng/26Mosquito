@@ -2,7 +2,7 @@
 __pycache__/
 .DS_Store
 **/data/raw/
-**/data/processed/ong2021_800_masked/
+**/data/processed/ong2021_800_masked*/
 *.pt
 *.pth
 runs/

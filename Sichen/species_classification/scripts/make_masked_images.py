@@ -4,7 +4,11 @@ Why: the baseline model learned to tell the species apart from the background (s
 background_test.py). Training on these images forces it to use the mosquito itself.
 Uses the same segmentation as background_test.py.
 
-data/processed/ong2021_800/aegypti_0/aegypti1b.jpg -> data/processed/ong2021_800_masked/aegypti_0/aegypti1b.jpg
+data/processed/ong2021_800/aegypti_0/aegypti1b.jpg -> data/processed/ong2021_800_masked_tight/aegypti_0/aegypti1b.jpg
+
+Output folders:
+  ong2021_800_masked        older version (8 px background border), used by run 20261109_203751
+  ong2021_800_masked_tight  current version (mosquito pixels + 2 px), see MARGIN_RADIUS
 
 Usage:  python scripts/make_masked_images.py
 """
@@ -19,7 +23,7 @@ sys.path.insert(0, str(ROOT))  # so the modules in the project folder can be imp
 from background_test import keep_mosquito, mosquito_mask  # noqa: E402
 
 IN_DIR = ROOT / "data" / "processed" / "ong2021_800"
-OUT_DIR = ROOT / "data" / "processed" / "ong2021_800_masked"
+OUT_DIR = ROOT / "data" / "processed" / "ong2021_800_masked_tight"
 SPLITS_CSV = ROOT / "data" / "splits.csv"
 
 

@@ -50,7 +50,10 @@ STRONG_THRESHOLD = 30  # clearly mosquito (body, dark leg segments): used to fin
 WEAK_THRESHOLD = 12    # faint parts (wings, pale legs): kept only if connected to the strong part
 BRIDGE_RADIUS = 4      # pixels; joins strong pieces of one mosquito
 GAP_RADIUS = 6         # pixels; lets the growth jump over white leg bands
-MARGIN_RADIUS = 8      # pixels; extra safety border around the final mask
+MARGIN_RADIUS = 2      # pixels; border of real background kept around the mosquito pixels
+# History: run 20261109_203751 kept the whole grown region plus an 8 px border. That border of
+# real background still leaked species information (halo test), so the mask is now the mosquito
+# pixels themselves plus 2 px.
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # image filters run faster on a GPU
 
@@ -112,10 +115,10 @@ def fill_holes(mask):
 def segment(image):
     """Return (core, mask), two boolean arrays (height, width).
 
-    core: the grown mosquito region (dark pixels, plus faint parts and white leg bands near them)
-    mask: core plus the outer safety border (MARGIN_RADIUS) of real background; this is what gets kept
-    mask & ~core is therefore pure background, used by the halo tests.
-    (A first version used only the dark pixels as core; its "halo" still held pale leg bands.)
+    core: the mosquito pixels (darker than the background, connected to the mosquito, holes such as
+          white scales inside the body filled). White leg bands touching the edge are not included.
+    mask: core plus a MARGIN_RADIUS border of real background; this is what gets kept
+    mask & ~core is the border tested by the halo tests (mostly background, maybe bits of pale legs).
 
     Two thresholds ("hysteresis"): the clearly dark pixels locate the mosquito, then the mask
     grows into faint pixels touching it. Faint debris elsewhere in the frame is not touched.
@@ -125,8 +128,9 @@ def segment(image):
     darkness = background - np.asarray(gray, dtype=np.float32)
     seed = largest_component(dilate(darkness > STRONG_THRESHOLD, BRIDGE_RADIUS))
     allowed = dilate(darkness > WEAK_THRESHOLD, GAP_RADIUS) | seed
-    grown = grow_within(seed, allowed)
-    return fill_holes(grown), dilate(grown, MARGIN_RADIUS)
+    grown = grow_within(seed, allowed)            # the mosquito, plus background between its faint parts
+    core = fill_holes(grown & (darkness > WEAK_THRESHOLD))
+    return core, dilate(core, MARGIN_RADIUS)
 
 
 def mosquito_mask(image):
