@@ -101,8 +101,21 @@ def grow_within(seed, allowed):
         current = grown
 
 
-def mosquito_mask(image):
-    """Return a boolean array (height, width) that is True on the mosquito.
+def fill_holes(mask):
+    """Also mark pixels fully enclosed by the mask (e.g. white scales inside the dark body)."""
+    border = np.zeros_like(mask)
+    border[0, :] = border[-1, :] = border[:, 0] = border[:, -1] = True
+    reachable_from_border = grow_within(border & ~mask, ~mask)
+    return ~reachable_from_border
+
+
+def segment(image):
+    """Return (core, mask), two boolean arrays (height, width).
+
+    core: the grown mosquito region (dark pixels, plus faint parts and white leg bands near them)
+    mask: core plus the outer safety border (MARGIN_RADIUS) of real background; this is what gets kept
+    mask & ~core is therefore pure background, used by the halo tests.
+    (A first version used only the dark pixels as core; its "halo" still held pale leg bands.)
 
     Two thresholds ("hysteresis"): the clearly dark pixels locate the mosquito, then the mask
     grows into faint pixels touching it. Faint debris elsewhere in the frame is not touched.
@@ -112,7 +125,13 @@ def mosquito_mask(image):
     darkness = background - np.asarray(gray, dtype=np.float32)
     seed = largest_component(dilate(darkness > STRONG_THRESHOLD, BRIDGE_RADIUS))
     allowed = dilate(darkness > WEAK_THRESHOLD, GAP_RADIUS) | seed
-    return dilate(grow_within(seed, allowed), MARGIN_RADIUS)
+    grown = grow_within(seed, allowed)
+    return fill_holes(grown), dilate(grown, MARGIN_RADIUS)
+
+
+def mosquito_mask(image):
+    """Return a boolean array (height, width) that is True on the mosquito plus its border."""
+    return segment(image)[1]
 
 
 # One fixed fill color for every image (about the median background color of the dataset).
@@ -125,6 +144,27 @@ def keep_mosquito(image, mask):
     pixels = np.asarray(image).copy()
     pixels[~mask] = FILL_COLOR
     return Image.fromarray(pixels)
+
+
+HALO_SHAPE_COLOR = (70, 90, 160)  # a flat color clearly different from FILL_COLOR, for keep_halo_shape
+
+
+def keep_halo(image, mask, core):
+    """Keep only the border of real background around the mosquito; everything else solid."""
+    pixels = np.asarray(image).copy()
+    halo = mask & ~core
+    out = np.empty_like(pixels)
+    out[:] = FILL_COLOR
+    out[halo] = pixels[halo]
+    return Image.fromarray(out)
+
+
+def keep_halo_shape(image, mask, core):
+    """Like keep_halo, but the border is one flat color: only its shape (the outline) is left."""
+    out = np.empty_like(np.asarray(image))
+    out[:] = FILL_COLOR
+    out[mask & ~core] = HALO_SHAPE_COLOR
+    return Image.fromarray(out)
 
 
 def keep_background(image, mask, blur_radius=25):
@@ -153,14 +193,14 @@ def keep_background(image, mask, blur_radius=25):
     return Image.fromarray(filled.clip(0, 255).astype(np.uint8))
 
 
-def save_preview(rows, masks, path):
-    """One figure row per image: original, mask in red, mosquito only, background only."""
-    fig, axes = plt.subplots(len(rows), 4, figsize=(14, len(rows) * 2.6), squeeze=False)
+def save_preview(rows, masks, cores, path):
+    """One figure row per image: original, mask in red, then the edited versions."""
+    fig, axes = plt.subplots(len(rows), 6, figsize=(21, len(rows) * 2.6), squeeze=False)
     for ax in axes.flat:
         ax.axis("off")
     for ax_row, (r, area) in zip(axes, rows):
         image = Image.open(IMAGE_DIR / r["path"]).convert("RGB")
-        mask = masks[r["path"]]
+        mask, core = masks[r["path"]], cores[r["path"]]
         overlay = np.asarray(image).copy()
         overlay[mask] = overlay[mask] * 0.5 + np.array([255, 0, 0]) * 0.5
         ax_row[0].imshow(image)
@@ -168,7 +208,10 @@ def save_preview(rows, masks, path):
         ax_row[1].imshow(overlay)
         ax_row[2].imshow(keep_mosquito(image, mask))
         ax_row[3].imshow(keep_background(image, mask))
-    for ax, title in zip(axes[0], ["", "mask", "A: mosquito only", "B: background only"]):
+        ax_row[4].imshow(keep_halo(image, mask, core))
+        ax_row[5].imshow(keep_halo_shape(image, mask, core))
+    for ax, title in zip(axes[0], ["", "mask", "A: mosquito only", "B: background only",
+                                   "C: halo only", "D: halo shape only"]):
         if title:
             ax.set_title(title, fontsize=9)
     fig.tight_layout()
@@ -177,19 +220,23 @@ def save_preview(rows, masks, path):
 
 
 CONDITIONS = {
-    "original": lambda image, mask: image,
-    "mosquito_only": keep_mosquito,
-    "background_only": keep_background,
+    "original": lambda image, mask, core: image,
+    "mosquito_only": lambda image, mask, core: keep_mosquito(image, mask),
+    "background_only": lambda image, mask, core: keep_background(image, mask),
+    "halo_only": keep_halo,
+    "halo_shape_only": keep_halo_shape,
+    "mosquito_no_halo": lambda image, mask, core: keep_mosquito(image, core),
 }
 
 
-def predict_conditions(rows, masks, model, transform, classes, batch_size=32):
+def predict_conditions(rows, masks, cores, model, transform, classes, batch_size=32):
     """Run the model on every image in every condition. Returns one dict per (condition, image)."""
     results = []
     for condition, edit in CONDITIONS.items():
         for start in range(0, len(rows), batch_size):
             chunk = rows[start:start + batch_size]
-            images = [edit(Image.open(IMAGE_DIR / r["path"]).convert("RGB"), masks[r["path"]]) for r in chunk]
+            images = [edit(Image.open(IMAGE_DIR / r["path"]).convert("RGB"), masks[r["path"]], cores[r["path"]])
+                      for r in chunk]
             batch = torch.stack([transform(image) for image in images]).to(DEVICE)
             with torch.no_grad():
                 probs = torch.softmax(model(batch), dim=1).cpu()
@@ -258,9 +305,9 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Segment every image and save a preview to check the masks
-    masks, areas = {}, {}
+    masks, cores, areas = {}, {}, {}
     for r in rows:
-        masks[r["path"]] = mosquito_mask(Image.open(IMAGE_DIR / r["path"]).convert("RGB"))
+        cores[r["path"]], masks[r["path"]] = segment(Image.open(IMAGE_DIR / r["path"]).convert("RGB"))
         areas[r["path"]] = float(masks[r["path"]].mean())
     values = np.array(list(areas.values()))
     print(f"{args.split}: {len(rows)} images | mask area of frame: min {values.min():.1%}, "
@@ -273,13 +320,13 @@ def main():
         picked += rng.sample([r for r in rows if r["species"] == species], args.n)
     by_area = sorted(rows, key=lambda r: areas[r["path"]])
     picked += by_area[:2] + by_area[-2:]
-    save_preview([(r, areas[r["path"]]) for r in picked], masks, out_dir / "mask_check.jpg")
+    save_preview([(r, areas[r["path"]]) for r in picked], masks, cores, out_dir / "mask_check.jpg")
 
     # 2. Run the trained model on the original and edited images
     model, ckpt = load_checkpoint(args.checkpoint, DEVICE)
     classes = ckpt["classes"]
     transform = eval_transform(ckpt["input_size"], ckpt["mean"], ckpt["std"])
-    results = predict_conditions(rows, masks, model, transform, classes)
+    results = predict_conditions(rows, masks, cores, model, transform, classes)
 
     with open(out_dir / "predictions.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(results[0]))

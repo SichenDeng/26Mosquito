@@ -1,0 +1,14 @@
+checkpoint: C:\Users\Sichen Deng\Documents\JHU\Senior Design\26Mosquito\Sichen\species_classification\runs\20261109_181015\best.pt (epoch 11)
+split: test | 180 images | 45 specimens
+NOTE: public-dataset performance only, not device performance.
+
+accuracy (image level):    0.978
+accuracy (specimen level): 1.000
+
+aegypti      precision 1.000  recall 0.957  f1 0.978  support 92
+albopictus   precision 0.957  recall 1.000  f1 0.978  support 88
+
+confusion matrix (rows = true, cols = predicted):
+                 aegypti   albopictus
+aegypti               88            4
+albopictus             0           88

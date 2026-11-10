@@ -1,0 +1,33 @@
+checkpoint: C:\Users\Sichen Deng\Documents\JHU\Senior Design\26Mosquito\Sichen\species_classification\runs\20261109_181015\best.pt (epoch 11)
+split: val | 180 images
+
+== original ==
+accuracy 1.000 | AUC 1.000
+  true aegypti     recall 1.000 | predicted as aegypti 88, albopictus 0
+  true albopictus  recall 1.000 | predicted as aegypti 0, albopictus 92
+
+== mosquito_only ==
+accuracy 0.644 | AUC 0.948
+  true aegypti     recall 1.000 | predicted as aegypti 88, albopictus 0
+  true albopictus  recall 0.304 | predicted as aegypti 64, albopictus 28
+
+== background_only ==
+accuracy 0.939 | AUC 1.000
+  true aegypti     recall 0.875 | predicted as aegypti 77, albopictus 11
+  true albopictus  recall 1.000 | predicted as aegypti 0, albopictus 92
+
+== halo_only ==
+accuracy 0.600 | AUC 0.736
+  true aegypti     recall 0.818 | predicted as aegypti 72, albopictus 16
+  true albopictus  recall 0.391 | predicted as aegypti 56, albopictus 36
+
+== halo_shape_only ==
+accuracy 0.561 | AUC 0.615
+  true aegypti     recall 0.273 | predicted as aegypti 24, albopictus 64
+  true albopictus  recall 0.837 | predicted as aegypti 15, albopictus 77
+
+== mosquito_no_halo ==
+accuracy 0.550 | AUC 0.924
+  true aegypti     recall 1.000 | predicted as aegypti 88, albopictus 0
+  true albopictus  recall 0.120 | predicted as aegypti 81, albopictus 11
+
