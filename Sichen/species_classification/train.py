@@ -90,6 +90,8 @@ def main():
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--limit-batches", type=int, default=None, help="only for quick tests")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--image-dir", default="data/processed/ong2021_800",
+                        help="image folder relative to this script; data/processed/ong2021_800_masked = mosquito only")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -97,11 +99,12 @@ def main():
     device = get_device()
     run_dir = ROOT / "runs" / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True)
-    print(f"device: {device} | saving to {run_dir}")
+    print(f"device: {device} | images: {args.image_dir} | saving to {run_dir}")
 
-    train_loader = DataLoader(MosquitoDataset("train", build_transforms(train=True)),
+    image_dir = ROOT / args.image_dir
+    train_loader = DataLoader(MosquitoDataset("train", build_transforms(train=True), image_dir),
                               batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    val_loader = DataLoader(MosquitoDataset("val", build_transforms(train=False)),
+    val_loader = DataLoader(MosquitoDataset("val", build_transforms(train=False), image_dir),
                             batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     model = build_model().to(device)
@@ -127,6 +130,7 @@ def main():
                 # Save everything needed to use the model later, not just the weights
                 torch.save({"model_state": model.state_dict(), "arch": "resnet50", "classes": CLASSES,
                             "input_size": INPUT_SIZE, "mean": IMAGENET_MEAN, "std": IMAGENET_STD,
+                            "image_dir": args.image_dir,
                             "epoch": epoch, "val_loss": val_loss, "val_acc": val_acc},
                            run_dir / "best.pt")
                 mark = "  <- best, saved"

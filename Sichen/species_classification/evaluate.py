@@ -23,7 +23,7 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 
-from dataset import MosquitoDataset, eval_transform
+from dataset import ROOT, MosquitoDataset, eval_transform
 from train import get_device, load_checkpoint
 
 
@@ -81,12 +81,17 @@ def main():
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--split", default="test", choices=["train", "val", "test"])
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--image-dir", help="image folder relative to this script "
+                                            "(default: the folder the checkpoint was trained on)")
     args = parser.parse_args()
 
     device = get_device()
     model, ckpt = load_checkpoint(args.checkpoint, device)
     classes = ckpt["classes"]
-    dataset = MosquitoDataset(args.split, eval_transform(ckpt["input_size"], ckpt["mean"], ckpt["std"]))
+    # Older checkpoints don't store image_dir: they were trained on the original images
+    image_dir = args.image_dir or ckpt.get("image_dir", "data/processed/ong2021_800")
+    dataset = MosquitoDataset(args.split, eval_transform(ckpt["input_size"], ckpt["mean"], ckpt["std"]),
+                              ROOT / image_dir)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 
     # Run the model on every image. softmax turns the 2 raw scores into "probabilities" summing to 1.
@@ -127,7 +132,7 @@ def main():
         specimen_correct += classes[mean_scores.index(max(mean_scores))] == spec_rows[0]["true"]
 
     lines = [f"checkpoint: {args.checkpoint} (epoch {ckpt['epoch']})",
-             f"split: {args.split} | {len(rows)} images | {len(by_specimen)} specimens",
+             f"split: {args.split} | {len(rows)} images | {len(by_specimen)} specimens | images: {image_dir}",
              "NOTE: public-dataset performance only, not device performance.", "",
              f"accuracy (image level):    {accuracy:.3f}",
              f"accuracy (specimen level): {specimen_correct / len(by_specimen):.3f}", "",
